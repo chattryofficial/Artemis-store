@@ -2161,12 +2161,12 @@ PT Artemiscom studio.</p></div>
   renderOrders();
 })();
 </script>
-<!-- Login / Daftar: demo lokal di browser perangkat ini -->
+<!-- Login / Daftar: terhubung ke Supabase Auth -->
 <div aria-labelledby="authTitle" aria-modal="true" class="auth-overlay" id="authOverlay" role="dialog">
 <div class="auth-card">
 <button aria-label="Tutup" class="auth-close" id="authClose" type="button">×</button>
 <h2 id="authTitle">Masuk ke Artemis</h2>
-<p id="authDescription">Login untuk menyimpan sesi akun pada browser ini.</p>
+<p id="authDescription">Login untuk mengakses akun Artemis Store.</p>
 <form autocomplete="on" id="authForm">
 <div hidden="" id="authNameWrap"><label for="authName">Nama pengguna</label><input autocomplete="nickname" id="authName" maxlength="40" name="name" placeholder="Nama kamu" type="text"/></div>
 <label for="authEmail">Email</label><input autocomplete="email" id="authEmail" maxlength="120" name="email" placeholder="nama@email.com" required="" type="email"/>
@@ -2177,6 +2177,7 @@ PT Artemiscom studio.</p></div>
 <div class="auth-switch" id="authSwitch">Belum punya akun? Daftar</div>
 </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
   const overlay=document.getElementById('authOverlay');
@@ -2188,38 +2189,64 @@ PT Artemiscom studio.</p></div>
   const submit=document.getElementById('authSubmit'), msg=document.getElementById('authMessage');
   const switcher=document.getElementById('authSwitch'), loginLink=document.getElementById('navLogin'), registerLink=document.getElementById('navRegister'), logoutLink=document.getElementById('navLogout');
   const mobileLogout=document.getElementById('navLogoutMobile');
-  const USERS_KEY='artemisStoreLocalUsersV1', SESSION_KEY='artemisStoreLocalSessionV1';
-  let mode='login';
-  function readUsers(){try{const v=JSON.parse(localStorage.getItem(USERS_KEY)||'[]');return Array.isArray(v)?v:[]}catch(e){return []}}
-  function setMode(next){mode=next;title.textContent=mode==='register'?'Buat Akun Artemis':'Masuk ke Artemis';desc.textContent=mode==='register'?'Daftar akun demo untuk browser perangkat ini.':'Login untuk membuka sesi akun pada browser ini.';nameWrap.hidden=mode!=='register';nameInput.required=mode==='register';passInput.autocomplete=mode==='register'?'new-password':'current-password';submit.textContent=mode==='register'?'Daftar Sekarang':'Login';switcher.textContent=mode==='register'?'Sudah punya akun? Login':'Belum punya akun? Daftar';msg.textContent=''}
-  function open(modeWanted){setMode(modeWanted);overlay.classList.add('show');document.body.style.overflow='hidden';setTimeout(()=> (mode==='register'?nameInput:emailInput).focus(),60)}
-  function close(){overlay.classList.remove('show');document.body.style.overflow=''}
-  function refreshAuth(){let session=null;try{session=JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(e){};const logged=!!(session&&session.email);if(loginLink)loginLink.hidden=logged;if(registerLink)registerLink.hidden=logged;if(logoutLink)logoutLink.hidden=!logged;if(mobileLogout)mobileLogout.hidden=!logged;const accountLabel=document.getElementById('accountButtonLabel');if(accountLabel)accountLabel.textContent=logged?(session.name||'Akun'):'Akun';let old=document.getElementById('authGreeting');if(old)old.remove();if(logged&&loginLink){const li=document.createElement('li');li.id='authGreeting';const span=document.createElement('span');span.className='auth-status';span.textContent='Halo, '+(session.name||session.email.split('@')[0]);span.title=span.textContent;li.appendChild(span);loginLink.parentElement.before(li)}}
-  if(loginLink)loginLink.addEventListener('click',e=>{e.preventDefault();open('login')});
-  if(registerLink)registerLink.addEventListener('click',e=>{e.preventDefault();open('register')});
-  if(logoutLink)logoutLink.addEventListener('click',e=>{e.preventDefault();localStorage.removeItem(SESSION_KEY);refreshAuth();close();alert('Kamu sudah keluar dari akun lokal Artemis Store.')});
-  if(mobileLogout)mobileLogout.addEventListener('click',e=>{e.preventDefault();localStorage.removeItem(SESSION_KEY);refreshAuth();close();navMenu?.classList.remove('active');alert('Kamu sudah keluar dari akun lokal Artemis Store.')});
-  document.querySelectorAll('[data-auth]').forEach(link=>link.addEventListener('click',e=>{e.preventDefault();open(link.dataset.auth);navMenu?.classList.remove('active');document.getElementById('hamburger-menu')?.setAttribute('aria-expanded','false')}));
+  const SUPABASE_URL='https://lyizlpvupyngwwfeohcq.supabase.co';
+  const SUPABASE_KEY='sb_publishable_yqOPJIV8-07qyXU_1xP4pA_En-7GEeh';
+  const client=window.supabase&&window.supabase.createClient?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+  let mode='login', currentUser=null;
+  function setMode(next){mode=next;title.textContent=mode==='register'?'Buat Akun Artemis':'Masuk ke Artemis';desc.textContent=mode==='register'?'Daftar akun gratis Artemis Store.':'Login ke akun Artemis Store.';nameWrap.hidden=mode!=='register';nameInput.required=mode==='register';passInput.autocomplete=mode==='register'?'new-password':'current-password';submit.textContent=mode==='register'?'Daftar Sekarang':'Login';switcher.textContent=mode==='register'?'Sudah punya akun? Login':'Belum punya akun? Daftar';msg.textContent='';}
+  function open(modeWanted){setMode(modeWanted);overlay.classList.add('show');document.body.style.overflow='hidden';setTimeout(()=> (mode==='register'?nameInput:emailInput).focus(),60);}
+  function close(){overlay.classList.remove('show');document.body.style.overflow='';}
+  function refreshAuth(user){currentUser=user||null;const logged=!!currentUser;if(loginLink)loginLink.hidden=logged;if(registerLink)registerLink.hidden=logged;if(logoutLink)logoutLink.hidden=!logged;if(mobileLogout)mobileLogout.hidden=!logged;const accountLabel=document.getElementById('accountButtonLabel');const displayName=currentUser?.user_metadata?.display_name||currentUser?.email?.split('@')[0]||'Akun';if(accountLabel)accountLabel.textContent=logged?displayName:'Akun';let old=document.getElementById('authGreeting');if(old)old.remove();if(logged&&loginLink){const li=document.createElement('li');li.id='authGreeting';const span=document.createElement('span');span.className='auth-status';span.textContent='Halo, '+displayName;span.title=span.textContent;li.appendChild(span);loginLink.parentElement.before(li);}}
+  async function signOut(){if(!client)return;const {error}=await client.auth.signOut();if(error){alert('Gagal keluar: '+error.message);return;}close();}
+  if(loginLink)loginLink.addEventListener('click',e=>{e.preventDefault();open('login');});
+  if(registerLink)registerLink.addEventListener('click',e=>{e.preventDefault();open('register');});
+  if(logoutLink)logoutLink.addEventListener('click',async e=>{e.preventDefault();await signOut();});
+  if(mobileLogout)mobileLogout.addEventListener('click',async e=>{e.preventDefault();await signOut();navMenu?.classList.remove('active');});
+  document.querySelectorAll('[data-auth]').forEach(link=>link.addEventListener('click',e=>{e.preventDefault();open(link.dataset.auth);navMenu?.classList.remove('active');document.getElementById('hamburger-menu')?.setAttribute('aria-expanded','false');}));
   document.getElementById('authClose').addEventListener('click',close);
-  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
   switcher.addEventListener('click',()=>setMode(mode==='login'?'register':'login'));
-  async function hashPassword(password){if(window.crypto&&crypto.subtle){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(password));return Array.from(new Uint8Array(bytes)).map(b=>b.toString(16).padStart(2,'0')).join('')}return 'local-demo:'+password}
-  form.addEventListener('submit',async e=>{e.preventDefault();msg.textContent='';const email=emailInput.value.trim().toLowerCase(),password=passInput.value;if(password.length<6){msg.textContent='Kata sandi minimal 6 karakter.';return}try{const users=readUsers();const passwordHash=await hashPassword(password);if(mode==='register'){if(!nameInput.value.trim()){msg.textContent='Isi nama pengguna terlebih dahulu.';return}if(users.some(u=>u.email===email)){msg.textContent='Email ini sudah terdaftar. Silakan login.';return}users.push({name:nameInput.value.trim(),email,passwordHash,createdAt:new Date().toISOString()});localStorage.setItem(USERS_KEY,JSON.stringify(users));localStorage.setItem(SESSION_KEY,JSON.stringify({name:nameInput.value.trim(),email}));msg.textContent='Pendaftaran berhasil!';refreshAuth();setTimeout(close,650)}else{const user=users.find(u=>u.email===email&&u.passwordHash===passwordHash);if(!user){msg.textContent='Email atau kata sandi tidak cocok. Jika belum punya akun, pilih Daftar.';return}localStorage.setItem(SESSION_KEY,JSON.stringify({name:user.name,email:user.email}));msg.textContent='Login berhasil!';refreshAuth();setTimeout(close,500)}}catch(err){msg.textContent='Penyimpanan browser tidak tersedia. Coba gunakan browser biasa dan aktifkan penyimpanan.'}});
-  // Navigasi layanan kini dikendalikan langsung dari menu utama.
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();msg.textContent='';
+    if(!client){msg.textContent='Layanan akun belum berhasil dimuat. Periksa koneksi lalu muat ulang halaman.';return;}
+    const email=emailInput.value.trim().toLowerCase(),password=passInput.value;
+    if(password.length<6){msg.textContent='Kata sandi minimal 6 karakter.';return;}
+    submit.disabled=true;submit.textContent='Memproses...';
+    try{
+      if(mode==='register'){
+        const displayName=nameInput.value.trim();
+        if(!displayName){msg.textContent='Isi nama pengguna terlebih dahulu.';return;}
+        const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName},emailRedirectTo:window.location.origin}});
+        if(error)throw error;
+        if(data.session){msg.textContent='Pendaftaran berhasil! Akun kamu sudah masuk.';refreshAuth(data.user);setTimeout(close,900);}
+        else{msg.textContent='Pendaftaran berhasil. Silakan cek email untuk verifikasi, lalu login.';form.reset();}
+      }else{
+        const {data,error}=await client.auth.signInWithPassword({email,password});
+        if(error)throw error;
+        msg.textContent='Login berhasil!';
+        refreshAuth(data.user);setTimeout(close,500);
+      }
+    }catch(err){msg.textContent=err.message||'Terjadi kesalahan. Coba lagi.';}
+    finally{submit.disabled=false;submit.textContent=mode==='register'?'Daftar Sekarang':'Login';}
+  });
+  if(client){
+    client.auth.getSession().then(({data})=>refreshAuth(data.session?.user||null));
+    client.auth.onAuthStateChange((_event,session)=>refreshAuth(session?.user||null));
+  }else{msg.textContent='Layanan akun tidak tersedia saat ini.';}
+  // Navigasi layanan tetap ditangani seperti sebelumnya.
   document.querySelectorAll('#nav-menu a[data-target]').forEach(link=>link.addEventListener('click',e=>{
-    e.preventDefault(); const targetId=link.dataset.target; const target=document.getElementById(targetId);
+    e.preventDefault();const targetId=link.dataset.target;const target=document.getElementById(targetId);
     if(target){document.querySelectorAll('.tab-content').forEach(panel=>panel.classList.remove('active'));target.classList.add('active');target.scrollIntoView({behavior:'smooth',block:'start'});}
     document.querySelectorAll('#nav-menu .nav-link').forEach(item=>item.classList.remove('active'));link.classList.add('active');
     navMenu?.classList.remove('active');hamburger?.setAttribute('aria-expanded','false');
   }));
   document.querySelectorAll('#nav-menu a[data-page]').forEach(link=>link.addEventListener('click',e=>{
-    e.preventDefault(); if(link.dataset.page==='home')window.scrollTo({top:0,behavior:'smooth'});
+    e.preventDefault();if(link.dataset.page==='home')window.scrollTo({top:0,behavior:'smooth'});
     else if(link.dataset.page==='transaction'){const area=document.querySelector('#transaksi, .transaction-section, #riwayat-transaksi');if(area)area.scrollIntoView({behavior:'smooth',block:'start'});else alert('Halaman transaksi tersedia setelah melakukan pemesanan.');}
     else if(link.dataset.page==='about'){const area=document.querySelector('#tentang, .about-section, footer');if(area)area.scrollIntoView({behavior:'smooth',block:'start'});else alert('Terima kasih telah mengunjungi ARTEMIS STORE.');}
     document.querySelectorAll('#nav-menu .nav-link').forEach(item=>item.classList.remove('active'));link.classList.add('active');navMenu?.classList.remove('active');hamburger?.setAttribute('aria-expanded','false');
   }));
-  refreshAuth();
 })();
 </script>
 <script id="artemis-card-enhancer">
